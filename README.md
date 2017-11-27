@@ -1,2 +1,2 @@
 # hi-client
-Python client for [hi by b1narykid](https://github.com/b1narykid/hi)
+Python client for [hi](https://github.com/b1narykid/hi)
