@@ -2,6 +2,31 @@ import json
 import websocket
 import threading
 import sys
+import time
+RUNNING = True
+t1 = None
+def sleep(t):
+    while(t > 1):
+        t -= 1
+        if(not RUNNING):
+            sys.exit()
+        time.sleep(1)
+    time.sleep(t % 1)
+def terminate():
+    if(t1):
+        t1.do_run = False
+        t1.join()
+    #if(t2):
+    #    t2.do_run = False
+    #    t2.join()
+    sys.exit()
+def timestamp():
+    return int(time.time() * 1000)
+logfn = "rawlog_{0}.log".format(timestamp())
+def rawlog(src, data = ''):
+    f = open(logfn, 'a')
+    f.write('{0} [{1}] >>> {2}\n'.format(src, timestamp(), data))
+    f.close()
 class teletype:
     fg256prefix = (38, 5)
     bg256prefix = (48, 5)
@@ -67,12 +92,15 @@ class chatapp:
     room = 'general'
     ws = None
     meta = False
+    closed = False
+    path = 'ws'
     def join(self, host, name = None, nossl = False):
         self.host = host
         if(None == name):
             name = self.username
+        rawlog('JOIN', json.dumps({'host': host, 'name': name, 'nossl': nossl}))
         p = 'ws' if nossl else 'wss'
-        self.ws = websocket.WebSocketApp("{0}://{1}/chat?username={2}".format(p, host, name), on_message = self.onMessage, on_error = self.onError, on_close = self.onClose)
+        self.ws = websocket.WebSocketApp("{0}://{1}/{3}?username={2}".format(p, host, name, self.path), on_message = self.onMessage, on_error = self.onError, on_close = self.onClose)
         self.ws.run_forever()
     def sendmsg(self, msg):
         if(len(msg) and msg[0] == ':'):
@@ -81,13 +109,16 @@ class chatapp:
                 msg = msg.split()
                 if(msg[0] == 'exit'):
                     self.ws.close()
-                    exit()
+                    RUNNING = False
+                    terminate()
+                    return
                 if(msg[0] == 'help'):
                     print('''
                     :help - this message
                     :exit - exit this app
                     :name <String name> - change username
                     :meta <Boolean value> - seems to be useless
+                    :cat <String filename> - send file content to chat (name with spaces not supported)
                     ::msg - pass ":msg" to server
                     ''')
                     return
@@ -95,12 +126,25 @@ class chatapp:
                     self.username = msg[1]
                     return
                 if(msg[0] == 'meta'):
+                    if(len(msg) < 2):
+                        print('Not enough arguments!')
+                        return
                     if(msg[1] in ('1', 'true', 'True', 'TRUE')):
                         self.meta = True
                     elif(msg[1] in ('0', 'false', 'False', 'FALSE')):
                         self.meta = False
                     else:
                         print('"{0}" is not boolean'.format(msg[1]))
+                    return
+                if(msg[0] == 'cat'):
+                    if(len(msg) < 2):
+                        print('Not enough arguments!')
+                        return
+                    try:
+                        f = open(msg[1], 'r')
+                        self.sendmsg(f.read())
+                    except FileNotFoundError:
+                        print('File "{0}" does not exist'.format(msg[1]))
                     return
                 print("Command not found!")
                 return
@@ -111,21 +155,47 @@ class chatapp:
                                     'Meta': self.meta})
         self.ws.send(d)
     def onMessage(self, ws, msg):
+        rawlog('MESSAGE', msg)
         d = json.loads(msg)
         if(type(d) != dict):
             print(msg)
             return
         print(teletype.proceedText(**d))
     def onClose(self, ws):
+        rawlog('CLOSE')
         print('Closed')
-        sys.exit()
+        RUNNING = False
+        self.closed = True
     def onError(self, ws, err):
+        rawlog('ERROR', err)
         print("Error! ", err)
+        self.closed = True
+#def notimeoutLoop(app):
+#    while(RUNNING):
+#        sleep(12)
+#        if(not RUNNING or not app or app.closed):
+#            break
+#        if(app.ws):
+#            app.ws.send('{}')
+#print(teletype.proceedText('qw\033[0;1erty\nuio', '', True))
+#teletype.users['zxv'] = (38, 5, 14)
+#print(teletype.proceedText('asd', 'zxv'))
 h = input("Host (e. g.: b1nary.tk): ")
 u = input("Username: ")
 a = chatapp()
 a.username = u
-t = threading.Thread(target = a.join, args = (h,))
-t.start()
-while(True):
-    a.sendmsg(input())
+if('--path' in sys.argv):
+    a.path = sys.argv[sys.argv.index('--path') + 1]
+t1 = threading.Thread(target = a.join, args = (h, None, '--nossl' in sys.argv))
+t1.start()
+#t2 = threading.Thread(target = notimeoutLoop, args = (a,))
+#t2.start()
+#t.join()
+while(RUNNING):
+    s = input()
+    if(a.closed or not RUNNING):
+        break
+    rawlog('INPUT', s)
+    a.sendmsg(s)
+terminate()
+
