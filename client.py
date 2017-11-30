@@ -3,6 +3,22 @@ import websocket
 import threading
 import sys
 import time
+import os
+if(os.name == 'nt'):
+    import colorama
+    colorama.init()
+if('--help' in sys.argv):
+    i = sys.argv.index('--help')
+    if(i == 0 or sys.argv[-1] not in ('--path', '--output')):
+        print('''
+Usage: python hi.py [options...]
+     --help         This help text
+     --nolog        Disable logging
+     --nossl        Use ws:// instead of wss:// 
+ -o, --output <file> Write logs to <file>
+     --path <path>  Connect to //hostname/<path> (default: ws)
+''')
+        exit()
 RUNNING = True
 t1 = None
 def sleep(t):
@@ -16,17 +32,24 @@ def terminate():
     if(t1):
         t1.do_run = False
         t1.join()
-    #if(t2):
-    #    t2.do_run = False
-    #    t2.join()
     sys.exit()
 def timestamp():
     return int(time.time() * 1000)
+LOGGING = True
+if('--nolog' in sys.argv):
+    i = sys.argv.index('--nolog')
+    if(i == 0 or sys.argv[-1] not in ('--path', '--output')):
+        LOGGING = False
 logfn = "rawlog_{0}.log".format(timestamp())
+if('--output' in sys.argv):
+    i = sys.argv.index('--output')
+    if(i == 0 or sys.argv[-1] not in ('--path', '--output') and len(sys.argv) - 1 > i):
+        logfn = sys.argv(i + 1)
 def rawlog(src, data = ''):
-    f = open(logfn, 'a')
-    f.write('{0} [{1}] >>> {2}\n'.format(src, timestamp(), data))
-    f.close()
+    if(LOGGING):
+        f = open(logfn, 'a')
+        f.write('{0} [{1}] >>> {2}\n'.format(src, timestamp(), data))
+        f.close()
 class teletype:
     fg256prefix = (38, 5)
     bg256prefix = (48, 5)
@@ -62,7 +85,7 @@ class teletype:
         estate = False
         e = teletype.styleFor(From, Meta)
         b.append(e)
-        Message = "{0}: {1}".format(('#' + Room) if Meta else From, Message)
+        Message = "{0}: {1}".format(From, Message)
         for c in Message:
             if(estate):
                 if(c in '[0123456789;'):
@@ -114,13 +137,13 @@ class chatapp:
                     return
                 if(msg[0] == 'help'):
                     print('''
-                    :help - this message
-                    :exit - exit this app
-                    :name <String name> - change username
-                    :meta <Boolean value> - seems to be useless
-                    :cat <String filename> - send file content to chat (name with spaces not supported)
-                    ::msg - pass ":msg" to server
-                    ''')
+:help - this message
+:exit - exit this app
+:name <String name> - change username
+:meta <Boolean value> - seems to be useless
+:cat <String filename> - send file content to chat (name with spaces not supported)
+::msg - pass ":msg" to server
+''')
                     return
                 if(msg[0] == 'name'):
                     self.username = msg[1]
@@ -170,27 +193,16 @@ class chatapp:
         rawlog('ERROR', err)
         print("Error! ", err)
         self.closed = True
-#def notimeoutLoop(app):
-#    while(RUNNING):
-#        sleep(12)
-#        if(not RUNNING or not app or app.closed):
-#            break
-#        if(app.ws):
-#            app.ws.send('{}')
-#print(teletype.proceedText('qw\033[0;1erty\nuio', '', True))
-#teletype.users['zxv'] = (38, 5, 14)
-#print(teletype.proceedText('asd', 'zxv'))
 h = input("Host (e. g.: b1nary.tk): ")
 u = input("Username: ")
 a = chatapp()
 a.username = u
 if('--path' in sys.argv):
-    a.path = sys.argv[sys.argv.index('--path') + 1]
+    i = sys.argv.index('--path')
+    if(i == 0 or sys.argv[-1] not in ('--path', '--output') and len(sys.argv) - 1 > i):
+        a.path = sys.argv[i + 1]
 t1 = threading.Thread(target = a.join, args = (h, None, '--nossl' in sys.argv))
 t1.start()
-#t2 = threading.Thread(target = notimeoutLoop, args = (a,))
-#t2.start()
-#t.join()
 while(RUNNING):
     s = input()
     if(a.closed or not RUNNING):
@@ -198,4 +210,3 @@ while(RUNNING):
     rawlog('INPUT', s)
     a.sendmsg(s)
 terminate()
-
