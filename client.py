@@ -5,8 +5,9 @@ import sys
 import time
 import os
 if(os.name == 'nt'):
-    import colorama
-    colorama.init()
+    if(input('Does your console support ASCII color sequences? (Y/[n]) ') not in ('Y', 'y')):
+        import colorama
+        colorama.init()
 if('--help' in sys.argv):
     i = sys.argv.index('--help')
     if(i == 0 or sys.argv[-1] not in ('--path', '--output')):
