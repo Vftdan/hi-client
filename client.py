@@ -202,7 +202,12 @@ if('--path' in sys.argv):
     i = sys.argv.index('--path')
     if(i == 0 or sys.argv[-1] not in ('--path', '--output') and len(sys.argv) - 1 > i):
         a.path = sys.argv[i + 1]
-t1 = threading.Thread(target = a.join, args = (h, None, '--nossl' in sys.argv))
+SSL_DISABLED = False
+if('--nossl' in sys.argv):
+    i = sys.argv.index('--nossl')
+    if(i == 0 or sys.argv[-1] not in ('--path', '--output')):
+        SSL_DISABLED = True
+t1 = threading.Thread(target = a.join, args = (h, None, SSL_DISABLED))
 t1.start()
 while(RUNNING):
     s = input()
